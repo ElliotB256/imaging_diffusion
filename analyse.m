@@ -11,7 +11,7 @@ pos = pos * 1e6;
 plot3(pos(:,1), pos(:,2), pos(:,3), '.')
 
 % Make the plot pretty.
-axis equal;
+% axis equal;
 view(-45, 45);
 set(gcf, 'Color', 'w');
 xlabel('x ($\mu$m)', 'Interpreter', 'Latex');
