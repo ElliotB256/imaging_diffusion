@@ -6,6 +6,8 @@
 extern crate atomecs;
 extern crate specs;
 
+use std::time::Instant;
+
 use lib::laser_cooling::force::{EmissionForceOption, EmissionForceConfiguration};
 use specs::prelude::*;
 use imaging_diffusion::photons::WritePhotonsSystem;
@@ -17,7 +19,7 @@ use lib::ecs;
 use lib::initiate::NewlyCreated;
 use lib::integrator::Timestep;
 use lib::laser::gaussian::GaussianBeam;
-use lib::laser_cooling::photons_scattered::{ActualPhotonsScatteredVector, ScatteringFluctuationsOption};
+use lib::laser_cooling::photons_scattered::{ScatteringFluctuationsOption};
 use lib::laser_cooling::CoolingLight;
 use lib::output::file;
 use lib::output::file::Text;
@@ -25,6 +27,8 @@ use nalgebra::Vector3;
 
 fn main() {
     
+    let now = Instant::now();
+
     // Create the simulation world
     let mut world = World::new();
     ecs::register_components(&mut world);
@@ -54,7 +58,7 @@ fn main() {
     dispatcher.setup(&mut world);
 
     // Create atoms
-    for i in 0..20 {
+    for _i in 0..100 {
         world
             .create_entity()
             .with(Position {
@@ -106,4 +110,6 @@ fn main() {
         dispatcher.dispatch(&mut world);
         world.maintain();
     }
+
+    println!("Simulation completed in {} ms.", now.elapsed().as_millis());
 }
