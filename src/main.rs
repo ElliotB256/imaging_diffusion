@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use lib::laser_cooling::force::{EmissionForceOption, EmissionForceConfiguration};
 use specs::prelude::*;
-use imaging_diffusion::photons::WritePhotonsSystem;
+use imaging_diffusion::photons::{WritePhotonsSystem, PhotonHistogramSystem, PhotonHistogram};
 
 extern crate atomecs as lib;
 extern crate nalgebra;
@@ -47,18 +47,26 @@ fn main() {
         "",
         &[],
     );
+    // builder.add(
+    //     WritePhotonsSystem::new("photons.csv".to_string()), 
+    //     "",
+    //     &["calculate_actual_photons"] 
+    // );
+
+    // Alternatively, use the histogramming system to count the number of photons at each point in a 3d grid.
     builder.add(
-        WritePhotonsSystem::new("photons.csv".to_string()), 
+        PhotonHistogramSystem{}, 
         "",
         &["calculate_actual_photons"] 
     );
+    world.insert(PhotonHistogram::new(100e-6));
 
     // Having defined the dispatcher, we now build it and set up required resources in the world.
     let mut dispatcher = builder.build();
     dispatcher.setup(&mut world);
 
     // Create atoms
-    for _i in 0..100 {
+    for _i in 0..100_000 {
         world
             .create_entity()
             .with(Position {
@@ -103,6 +111,9 @@ fn main() {
     let dt = 0.1e-6;
     world.insert(Timestep { delta: dt });
 
+
+    println!("Initialisation took {} ms.", now.elapsed().as_millis());
+
     // Run the simulation for a number of steps to generate the output.
     let exposure_us = 15.0;
     let n_steps = (exposure_us * 1.0e-6 / dt).ceil() as u32;
@@ -112,4 +123,8 @@ fn main() {
     }
 
     println!("Simulation completed in {} ms.", now.elapsed().as_millis());
+    
+    let histogram = world.read_resource::<PhotonHistogram>();
+    histogram.write_to_file("photon_histogram.csv".to_string());
+    println!("File written.");
 }
