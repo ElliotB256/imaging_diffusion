@@ -1,3 +1,11 @@
+%% Position atoms
+% Position some atoms - lets make a csv.
+
+pos = zeros(10, 3);
+% string of atoms separated by 1um along x.
+pos(:,1) = (-4.5:1:4.5) * 1e-6;
+csvwrite('input.csv', pos);
+
 %% Analyse
 % Analyse the simulated photon distribution and see how it looks.
 
@@ -22,12 +30,12 @@ xlabel('z ($\mu$m)', 'Interpreter', 'Latex');
 % Analyse the histogram (if you are using the PhotonHistogramSystem).
 
 data = csvread('photon_histogram.csv');
-data = reshape(data, 512, 512, 512);
+data = reshape(data, 256, 256, 256);
 
 % Sum along one dimension to make a 2d image
 image = squeeze(sum(data, 3));
 imagesc(log10(image));
 
-% Zoom in on the interesting bit
-xlim(255 + [ -30 30 ]);
-ylim(255 + [ -30 30 ]);
+% % Zoom in on the interesting bit
+% xlim(255 + [ -30 30 ]);
+% ylim(255 + [ -30 30 ]);

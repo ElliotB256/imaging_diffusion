@@ -13,6 +13,8 @@ use rand_distr;
 use rand_distr::{Distribution, UnitSphere};
 use std::io::Write;
 
+pub mod list;
+
 /// This system writes to an output file when an atom scatters a photon.
 ///
 /// The emission is assumed to be isotropic.
@@ -60,28 +62,38 @@ impl<'a> System<'a> for WritePhotonsSystem {
     }
 }
 
-
-const CELL_DIM: usize = 512;
-const CELL_NUM: usize = CELL_DIM*CELL_DIM*CELL_DIM;
 const ELEMENT: AtomicU32 = AtomicU32::new(0);
 
-/// This system constructs a spatial histogram of where photons are produced
+/// This system constructs a spatial histogram of where photons are produced.
+/// 
+/// AtomicU32 are used so that elements in the histogram can be updated from parallel threads -
+/// only a non-mutable borrow is required for the [PhotonHistogram] itself.
 pub struct PhotonHistogram {
-    cell_size: f64,
+    pub cell_size: f64,
+    cell_number: usize,
     cells: Vec<AtomicU32>
 }
 impl PhotonHistogram {
+    /// Create a new [PhotonHistogram]. 
+    /// 
+    /// # Arguments
+    /// 
+    /// * `domain_size`: size of the histogram domain in units of m.
+    /// 
+    /// * `cell_number`: number of cells along one dimension of the histogram.
     pub fn new(
-        domain_size: f64
+        domain_size: f64,
+        cell_number: usize
     ) -> Self
     {
         let mut cells = Vec::new();
-        for _ in 0..CELL_NUM {
+        for _ in 0..(cell_number*cell_number*cell_number) {
             cells.push(ELEMENT);
         }
         PhotonHistogram {
-            cell_size: domain_size / CELL_DIM as f64,
-            cells
+            cell_size: domain_size / cell_number as f64,
+            cells,
+            cell_number
         }
     }
 
@@ -94,16 +106,16 @@ impl PhotonHistogram {
 
     /// Get the cell index for a given position.
     fn get_index(&self, position: Vector3<f64>) -> Option<usize> {
-        let x = (position[0] / self.cell_size) as i32 + (CELL_DIM as i32) / 2;
-        let y = (position[1] / self.cell_size) as i32 + (CELL_DIM as i32) / 2;
-        let z = (position[2] / self.cell_size) as i32 + (CELL_DIM as i32) / 2;
+        let x = (position[0] / self.cell_size) as i32 + (self.cell_number as i32) / 2;
+        let y = (position[1] / self.cell_size) as i32 + (self.cell_number  as i32) / 2;
+        let z = (position[2] / self.cell_size) as i32 + (self.cell_number  as i32) / 2;
 
-        if (x < 0 || x >= CELL_DIM as i32) || (y < 0 || y >= CELL_DIM as i32) || (z < 0 || z >= CELL_DIM as i32) {
+        if (x < 0 || x >= self.cell_number  as i32) || (y < 0 || y >= self.cell_number  as i32) || (z < 0 || z >= self.cell_number  as i32) {
             return None;
         } else {
             return Some(
-                (z as usize) * CELL_DIM * CELL_DIM
-                + (y as usize) * CELL_DIM
+                (z as usize) * self.cell_number  * self.cell_number 
+                + (y as usize) * self.cell_number 
                 + x as usize
             );
         }

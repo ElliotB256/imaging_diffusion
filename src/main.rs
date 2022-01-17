@@ -8,9 +8,10 @@ extern crate specs;
 
 use std::time::Instant;
 
+use imaging_diffusion::photons::list::{RegisterPhotonsSystem, PhotonOutputter, RegisterInitialAtomsSystem};
 use lib::laser_cooling::force::{EmissionForceOption, EmissionForceConfiguration};
+use serde::Deserialize;
 use specs::prelude::*;
-use imaging_diffusion::photons::{WritePhotonsSystem, PhotonHistogramSystem, PhotonHistogram};
 
 extern crate atomecs as lib;
 extern crate nalgebra;
@@ -25,6 +26,13 @@ use lib::output::file;
 use lib::output::file::Text;
 use nalgebra::Vector3;
 
+#[derive(Debug, Deserialize)]
+pub struct AtomRecord {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64
+}
+
 fn main() {
     
     let now = Instant::now();
@@ -38,7 +46,6 @@ fn main() {
     let mut builder =
         ecs::create_simulation_dispatcher_builder();
 
-
     // Add our extra systems, which do things like generate output.
     //
     // Our photon output system must run after the total scattered each frame has been calculated.
@@ -47,23 +54,16 @@ fn main() {
         "",
         &[],
     );
-    // builder.add(
-    //     WritePhotonsSystem::new("photons.csv".to_string()), 
-    //     "",
-    //     &["calculate_actual_photons"] 
-    // );
 
-    // Alternatively, use the histogramming system to count the number of photons at each point in a 3d grid.
-    builder.add(
-        PhotonHistogramSystem{}, 
-        "",
-        &["calculate_actual_photons"] 
-    );
-    world.insert(PhotonHistogram::new(100e-6));
+    // Output atoms to an h5 file
+    builder.add(RegisterPhotonsSystem, "", &[]);
+    builder.add(RegisterInitialAtomsSystem, "", &[]);
+    world.insert(PhotonOutputter::new("test.h5".to_string()));
 
-    // Having defined the dispatcher, we now build it and set up required resources in the world.
+    // // Having defined the dispatcher, we now build it and set up required resources in the world.
     let mut dispatcher = builder.build();
     dispatcher.setup(&mut world);
+    
 
     // Create atoms
     for _i in 0..100_000 {
@@ -82,6 +82,31 @@ fn main() {
             .with(Mass { value: 87.0 })
             .build();
     }
+
+    // Read atoms from an input csv file:
+    // let res = csv::ReaderBuilder::new().has_headers(false).from_path("input.csv".to_string());
+    // match res {
+    //     Ok(mut rdr) => {
+    //         for result in rdr.deserialize() {
+    //             let record: AtomRecord = result.expect("Incorrect format in input.csv");
+    //             world
+    //                 .create_entity()
+    //                 .with(Position {
+    //                     pos: Vector3::new(record.x, record.y, record.z),
+    //                 })
+    //                 .with(Atom)
+    //                 .with(Force::new())
+    //                 .with(Velocity {
+    //                     vel: Vector3::new(0.0, 0.0, 0.00),
+    //                 })
+    //                 .with(NewlyCreated)
+    //                 .with(AtomicTransition::rubidium())
+    //                 .with(Mass { value: 87.0 })
+    //                 .build();
+    //         }
+    //     }
+    //     Err(_) => {panic!("Unable to open input.csv file - make sure one exists. This file should contain a line for each atom's position in the format 'x,y,z'");}
+    // }
 
     // Create the imaging laser. We set it aligned to the origin, propagating along +x, and with zero detuning.
     world
@@ -111,7 +136,6 @@ fn main() {
     let dt = 0.1e-6;
     world.insert(Timestep { delta: dt });
 
-
     println!("Initialisation took {} ms.", now.elapsed().as_millis());
 
     // Run the simulation for a number of steps to generate the output.
@@ -123,8 +147,4 @@ fn main() {
     }
 
     println!("Simulation completed in {} ms.", now.elapsed().as_millis());
-    
-    let histogram = world.read_resource::<PhotonHistogram>();
-    histogram.write_to_file("photon_histogram.csv".to_string());
-    println!("File written.");
 }
