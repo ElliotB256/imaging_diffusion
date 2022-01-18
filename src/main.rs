@@ -8,6 +8,7 @@ extern crate specs;
 
 use std::time::Instant;
 
+use hdf5::{File, SliceOrIndex, Error, H5Type};
 use imaging_diffusion::photons::list::{RegisterPhotonsSystem, PhotonOutputter, RegisterInitialAtomsSystem};
 use lib::laser_cooling::force::{EmissionForceOption, EmissionForceConfiguration};
 use serde::Deserialize;
@@ -58,55 +59,15 @@ fn main() {
     // Output atoms to an h5 file
     builder.add(RegisterPhotonsSystem, "", &[]);
     builder.add(RegisterInitialAtomsSystem, "", &[]);
-    world.insert(PhotonOutputter::new("test.h5".to_string()));
+    world.insert(PhotonOutputter::new("output.h5".to_string()));
 
     // // Having defined the dispatcher, we now build it and set up required resources in the world.
     let mut dispatcher = builder.build();
     dispatcher.setup(&mut world);
-    
 
-    // Create atoms
-    for _i in 0..100_000 {
-        world
-            .create_entity()
-            .with(Position {
-                pos: Vector3::new(0.0, 0.0, -0.00),
-            })
-            .with(Atom)
-            .with(Force::new())
-            .with(Velocity {
-                vel: Vector3::new(0.0, 0.0, 0.00),
-            })
-            .with(NewlyCreated)
-            .with(AtomicTransition::rubidium())
-            .with(Mass { value: 87.0 })
-            .build();
-    }
-
-    // Read atoms from an input csv file:
-    // let res = csv::ReaderBuilder::new().has_headers(false).from_path("input.csv".to_string());
-    // match res {
-    //     Ok(mut rdr) => {
-    //         for result in rdr.deserialize() {
-    //             let record: AtomRecord = result.expect("Incorrect format in input.csv");
-    //             world
-    //                 .create_entity()
-    //                 .with(Position {
-    //                     pos: Vector3::new(record.x, record.y, record.z),
-    //                 })
-    //                 .with(Atom)
-    //                 .with(Force::new())
-    //                 .with(Velocity {
-    //                     vel: Vector3::new(0.0, 0.0, 0.00),
-    //                 })
-    //                 .with(NewlyCreated)
-    //                 .with(AtomicTransition::rubidium())
-    //                 .with(Mass { value: 87.0 })
-    //                 .build();
-    //         }
-    //     }
-    //     Err(_) => {panic!("Unable to open input.csv file - make sure one exists. This file should contain a line for each atom's position in the format 'x,y,z'");}
-    // }
+    // Create atoms from an input h5 file.
+    // The input file format has a dataset called 'atoms' which has (x,y,z,vx,vy,vz) in SI units
+    load_atoms_from_h5(&mut world).expect("Unable to load initial atom position and velocity from 'atoms.h5' input file.");
 
     // Create the imaging laser. We set it aligned to the origin, propagating along +x, and with zero detuning.
     world
@@ -139,7 +100,7 @@ fn main() {
     println!("Initialisation took {} ms.", now.elapsed().as_millis());
 
     // Run the simulation for a number of steps to generate the output.
-    let exposure_us = 15.0;
+    let exposure_us = 100.0;
     let n_steps = (exposure_us * 1.0e-6 / dt).ceil() as u32;
     for _i in 0..n_steps {
         dispatcher.dispatch(&mut world);
@@ -147,4 +108,49 @@ fn main() {
     }
 
     println!("Simulation completed in {} ms.", now.elapsed().as_millis());
+}
+
+const READ_BATCH_SIZE: usize = 1000;
+
+#[derive(H5Type, Clone, PartialEq, Debug)] // register with HDF5
+#[repr(C)]
+pub struct InputAtomPositionRecord {
+    x: f64,
+    y: f64,
+    z: f64,
+    vx: f64,
+    vy: f64,
+    vz: f64
+}
+
+fn load_atoms_from_h5(world: &mut World) -> Result<(), Error> {
+    let file = File::open("atoms.h5")?;
+    let ds = file.dataset("atoms")?;
+    let mut n_created = 0;
+    
+    for i in (0..ds.size()).step_by(READ_BATCH_SIZE) {
+        let n_to_read = READ_BATCH_SIZE.min(ds.size()-i);
+        let atoms = ds.read_slice_1d::<InputAtomPositionRecord, SliceOrIndex>(SliceOrIndex::SliceCount{ start: i, step: 1, block: 1, count: n_to_read })?;
+        n_created += atoms.len();
+
+        for atom in atoms {
+            world
+                .create_entity()
+                .with(Position {
+                    pos: Vector3::new(atom.x, atom.y, atom.z),
+                })
+                .with(Atom)
+                .with(Force::new())
+                .with(Velocity {
+                    vel: Vector3::new(atom.vx, atom.vy, atom.vz),
+                })
+                .with(NewlyCreated)
+                .with(AtomicTransition::rubidium())
+                .with(Mass { value: 87.0 })
+                .build();
+        }        
+    }
+
+    println!("Loaded {:?} atoms from the input h5 file.", n_created);
+    Ok(())
 }

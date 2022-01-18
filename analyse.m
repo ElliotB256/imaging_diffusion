@@ -1,16 +1,33 @@
 %% Position atoms
-% Position some atoms - lets make a csv.
+% Let's create an initial input file of atom positions and velocities.
 
-pos = zeros(10, 3);
-% string of atoms separated by 1um along x.
-pos(:,1) = (-4.5:1:4.5) * 1e-6;
-csvwrite('input.csv', pos);
+% normal distribution for position, 100 um.
+pos_dist = makedist('Normal', 'sigma', 1e-4); % m
+vel_dist = makedist('Normal', 'sigma', 1e-3); % m/s
+
+% create structures for output file.
+n = int32(1e4);
+atoms = arrayfun(...
+    @(x,y,z,vx,vy,vz) struct('x', x, 'y', y, 'z', z, 'vx', vx, 'vy', vy, 'vz', vz), ...
+    random(pos_dist,n,1), random(pos_dist,n,1), random(pos_dist,n,1), ...
+    random(vel_dist,n,1), random(vel_dist,n,1), random(vel_dist,n,1) ...
+        );
+
+hdf5write('atoms.h5', '/atoms', atoms);
+
+%% Run simulation
+% Run the simulation in command line:
+%   cargo run --release
 
 %% Analyse
 % Analyse the simulated photon distribution and see how it looks.
-
-data = csvread('photons.csv');
-pos = data(:, 1:3);
+% 
+% You can read matlab output using hdf5read but its waaaay too slow:
+% photons = hdf5read('output.h5', '/photons');
+% 
+% Instead, use h5read:
+p = h5read('output.h5', '/photons');
+pos = [p.x0, p.x1, p.x2];
 
 % Convert to units of um
 pos = pos * 1e6;
@@ -25,17 +42,3 @@ set(gcf, 'Color', 'w');
 xlabel('x ($\mu$m)', 'Interpreter', 'Latex');
 xlabel('y ($\mu$m)', 'Interpreter', 'Latex');
 xlabel('z ($\mu$m)', 'Interpreter', 'Latex');
-
-%% Histogram
-% Analyse the histogram (if you are using the PhotonHistogramSystem).
-
-data = csvread('photon_histogram.csv');
-data = reshape(data, 256, 256, 256);
-
-% Sum along one dimension to make a 2d image
-image = squeeze(sum(data, 3));
-imagesc(log10(image));
-
-% % Zoom in on the interesting bit
-% xlim(255 + [ -30 30 ]);
-% ylim(255 + [ -30 30 ]);

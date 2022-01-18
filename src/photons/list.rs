@@ -33,7 +33,7 @@ impl PhotonRecord {
 
 #[derive(H5Type, Clone, PartialEq, Debug)] // register with HDF5
 #[repr(C)]
-struct InitialAtomPositionRecord(f64, f64, f64, f64, f64, f64);
+pub struct InitialAtomPositionRecord(pub f64, pub f64, pub f64, pub f64, pub f64, pub f64);
 impl InitialAtomPositionRecord {
     fn new(p: &Position, v: &Velocity) -> Self {
         InitialAtomPositionRecord { 0: p.pos[0], 1: p.pos[1], 2: p.pos[2], 3: v.vel[0], 4: v.vel[1], 5: v.vel[2] }
